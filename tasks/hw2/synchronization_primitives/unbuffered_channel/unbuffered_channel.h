@@ -13,41 +13,38 @@ public:
     void Send(const T& value) {
         std::unique_lock<std::mutex> lock(mtx);
 
-        sender_notifier.wait(lock, [this]() { return !is_writing || is_closed; });
+        sender_waiter.wait(lock, [this]() { return !is_writing || is_closed; });
         if (is_closed) {
             throw std::runtime_error("Channel is closed");
         }
 
         is_writing = true;
         buffer = value;
-        is_empty = false;
         receiver_notifier.notify_one();
 
-        reader_notifier.wait(lock, [this]() { return is_empty || is_closed; });
-        if (is_closed && !is_empty) {
-            is_empty = true;
+        writer_waiter.wait(lock, [this]() { return !buffer.has_value() || is_closed; });
+        if (is_closed && buffer.has_value()) {
             buffer.reset();
             is_writing = false;
-            sender_notifier.notify_all();
+            sender_waiter.notify_all();
             throw std::runtime_error("Channel is closed");
         }
 
         is_writing = false;
-        sender_notifier.notify_one();
+        sender_waiter.notify_one();
     }
 
     std::optional<T> Recv() {
         std::unique_lock<std::mutex> lock(mtx);
 
-        receiver_notifier.wait(lock, [this]() { return !is_empty || is_closed; });
-        if (is_empty) {
+        receiver_notifier.wait(lock, [this]() { return buffer.has_value() || is_closed; });
+        if (!buffer.has_value()) {
             return std::nullopt;
         }
 
-        T result = std::move(buffer.value());
+        T result = std::move(*buffer);
         buffer.reset();
-        is_empty = true;
-        reader_notifier.notify_one();
+        writer_waiter.notify_one();
 
         return result;
     }
@@ -56,19 +53,18 @@ public:
         std::unique_lock<std::mutex> lock(mtx);
         if (!is_closed) {
             is_closed = true;
-            sender_notifier.notify_all();
+            sender_waiter.notify_all();
             receiver_notifier.notify_all();
-            reader_notifier.notify_all();
+            writer_waiter.notify_all();
         }
     }
 
 private:
     std::mutex mtx;
-    std::condition_variable sender_notifier;
+    std::condition_variable sender_waiter;
     std::condition_variable receiver_notifier;
-    std::condition_variable reader_notifier;
+    std::condition_variable writer_waiter;
     bool is_writing = false;
-    bool is_empty = true;
     bool is_closed = false;
 
     std::optional<T> buffer;
