@@ -13,7 +13,8 @@ int main() {
         while (consumed < 2) {
             auto result = consumer.pop(1);
             if (result) {
-                std::cout << std::format("[CONSUMER]: Got msg: {}", *result) << std::endl;
+                std::string s(reinterpret_cast<const char*>(result->data()), result->size());
+                std::cout << std::format("[CONSUMER]: Got msg: {}", s, result->size()) << std::endl;
                 consumed++;
             }
         }

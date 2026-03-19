@@ -13,6 +13,8 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <span>
+#include <vector> 
 
 #include "../../include/utils/error.hpp"
 
@@ -60,7 +62,7 @@ public:
         }
     }
 
-    bool push(int type, const std::string& msg) {
+    bool push(int type, std::span<const std::byte> msg) {
         if (msg.size() > MAX_PAYLOAD_SIZE) 
             return false;
 
@@ -116,9 +118,9 @@ public:
         queue_elements = reinterpret_cast<Element*>(queue_meta + 1);
     }
 
-    std::optional<std::string> pop(int type) {
+    std::optional<std::vector<std::byte>> pop(int type) {
         while (true) {
-            std::optional<std::string> result;
+            std::optional<std::vector<std::byte>> result;
 
             auto tail = queue_meta->tail_idx.load();
             auto head = queue_meta->head_idx.load();
@@ -128,16 +130,18 @@ public:
 
             Element& element = queue_elements[tail % queue_capacity];
             if (!element.ready.load()) {
-                return std::nullopt;
+                return result;
             }
 
             bool is_correct_type = (element.header.type == type);
             element.ready.store(false);
             queue_meta->tail_idx.store(tail + 1);
 
-            if (is_correct_type)
-                result = std::string(element.payload, element.header.length);
+            if (is_correct_type) {
+                result = std::vector<std::byte>(element.header.length);
+                std::memcpy(result->data(), element.payload, element.header.length);
                 return result;
+            }
         }
     }
 
