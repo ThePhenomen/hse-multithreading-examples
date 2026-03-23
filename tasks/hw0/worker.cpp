@@ -36,13 +36,7 @@ int main() {
     };
 
     std::cout << "Starting computations" << std::endl;
-    pool.spawn([&graph](auto& sink) {
-        calculate_dfs(sink, graph, 0);
-    });
-    pool.spawn([&graph](auto& sink) {
-        calculate_dfs(sink, graph, 4);
-    });
-    pool.run();
+    calc_graph(graph);
     
     std::cout << "Results:" << std::endl;
     for (auto node: graph) {

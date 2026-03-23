@@ -86,3 +86,31 @@ public:
         }
     }
 };
+
+inline void calc_graph(std::vector<GraphNode>& graph) {
+    std::vector<bool> is_dependency(graph.size(), false);
+    for (const auto& node : graph) {
+        for (int dep : node.node_dependencies) {
+            is_dependency[dep] = true;
+        }
+    }
+
+    Scheduler pool;
+    int spawned_tasks = 0;
+
+    for (size_t i = 0; i < graph.size(); ++i) {
+        if (!is_dependency[i]) {
+            pool.spawn([&graph, i](auto& sink) {
+                calculate_dfs(sink, graph, i);
+            });
+            spawned_tasks++;
+        }
+    }
+
+    if (spawned_tasks == 0 && !graph.empty()) {
+        std::cout << "No independent roots found" << std::endl;
+        return;
+    }
+
+    pool.run();
+}
